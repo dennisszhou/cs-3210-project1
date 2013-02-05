@@ -16,9 +16,37 @@ struct thread_node {
 	unsigned int rand;
 	struct list_head list;
 }
+static unsigned long long BASE =76421123;
+static unsigned long long MOD=2147483647;
+struct thread_node *tmp;
+struct thread_node list;
+struct list_head *head;
+
+
 
 ssize_t fortune_write(struct file *filp, const char _user *buffer, unsugned long len, void *data);
 
+static void lprng_calculate(int tgid, int pid)
+{
+//head is a:struct list_head *head;
+//seed_list is the list;
+list_for_each(head, &list)
+{
+
+	
+	tmp=list_entry(head,&list);
+	if(tmp->tgid==tgid && pid==tmp->pid)
+	{
+	//should I return or should I update?
+	tmp->value=((BASE^threadcount)*tmp->value)%MOD;
+	//not sure if I can breaks
+	break;
+	}
+}
+
+
+
+}
 int init_lfprng_module(void) {
 
 	int ret = 0;
