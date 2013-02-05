@@ -18,7 +18,6 @@ struct thread_node {
 }
 static unsigned long long BASE =76421123;
 static unsigned long long MOD=2147483647;
-struct thread_node *tmp;
 struct thread_node list;
 struct list_head *head;
 
@@ -28,6 +27,7 @@ ssize_t fortune_write(struct file *filp, const char _user *buffer, unsugned long
 
 static void lprng_calculate(int tgid, int pid)
 {
+struct thread_node *tmp;
 //head is a:struct list_head *head;
 //seed_list is the list;
 list_for_each(head, &list)
