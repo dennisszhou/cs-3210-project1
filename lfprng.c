@@ -17,11 +17,14 @@ struct thread_node {
 
 ssize_t lfprng_write(struct file *filp, const char *buffer, unsigned long count, void *data);
 int lfprng_read(char *page, char **start, off_t offset, int count, int *eof, void *data);
+unsigned long long lfprng_generate(unsigned long long num);
 void add_thread_node(unsigned long long seed);
 int check_process(void);
 void remove_thread(struct thread_node *node);
 struct thread_node* find_thread_node(struct thread_node *node);
 
+static unsigned long long BASE =76421123;
+static unsigned int MOD=2147483647;
 static struct proc_dir_entry *proc_entry;
 
 static struct thread_node *head_node;
@@ -40,6 +43,7 @@ int init_lfprng_module(void) {
 	}
 	else {
 		head_node = NULL;
+		thread_count = 0;
 		tgid = -1;
 
 		proc_entry->read_proc = lfprng_read;
@@ -71,12 +75,11 @@ ssize_t lfprng_write(struct file *filp, const char *buffer, unsigned long count,
 
 	((char*)temp)[length] = '\0';
 
-	sscanf((const char*)temp, "%llu", &seed);
+	sscanf((const char*)temp, "%llu %d", &seed, &thread_count);
 
-	if(tgid == current->tgid || !check_process()) {
-		tgid = current->tgid;
-		add_thread_node(seed);
-	}
+	printk(KERN_INFO "Thread Count: %d\n", thread_count);
+	tgid = current->tgid;
+	add_thread_node(seed);
 
 	printk(KERN_INFO "My current tgid is %d\n", current->tgid);
 	printk(KERN_INFO "My current pid is %d\n", current->pid);
@@ -89,26 +92,53 @@ int lfprng_read(char *page, char **start, off_t offset, int count, int *eof, voi
 	struct thread_node *node;
 	unsigned long long seed = 10;
 
-	printk(KERN_INFO "Find Thread Node Call\n");
 	node = find_thread_node(head_node);
 
-	if(node != NULL)
+	if(node != NULL) {
 		length = sprintf(page, "%llu", node->num);
+		node->num = lfprng_generate(node->num);
+	}
 	else
 		length = sprintf(page, "%llu", seed);
 
 	return length + 1;
 }
 
+unsigned long long lfprng_generate(unsigned long long num) {
+	int i;
+	unsigned long long a = 1;
+	unsigned long long ret;
+
+	for(i = 0; i < thread_count; i++) {
+		a *= BASE;
+	}
+
+	a *= num;
+
+	ret = do_div(a, MOD);
+	return ret;
+}
+
 void add_thread_node(unsigned long long seed) {
-	struct thread_node *node = vmalloc(sizeof(struct thread_node));
-	node->pid = current->pid;
-	node->num = seed;
-	if(head_node != NULL)
-		node->next = head_node;
-	else
-		node->next = NULL;
-	head_node = node;
+	int i;
+	unsigned long long f = seed;
+	unsigned long long ret;
+	struct thread_node *node;
+
+	for(i = 0; i < thread_count; i++) {
+		f *= BASE;
+		ret = do_div(f, MOD);
+
+		printk(KERN_INFO "Thread %d: %llu\n", i, ret);
+		node = vmalloc(sizeof(struct thread_node));
+		node->pid = -1;
+		node->num = ret;
+		if(head_node != NULL)
+			node->next = head_node;
+		else
+			node->next = NULL;
+		head_node = node;
+	}
 }
 
 struct thread_node* find_thread_node(struct thread_node *node) {
@@ -117,6 +147,10 @@ struct thread_node* find_thread_node(struct thread_node *node) {
 
 	if(node->pid == current->pid) {
 		printk(KERN_INFO "Node Found: %d\n", node->pid);
+		return node;
+	}
+	else if(node->pid == -1) {
+		node->pid = current->pid;
 		return node;
 	}
 	else if(node->next != NULL)

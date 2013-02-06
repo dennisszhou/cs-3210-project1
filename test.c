@@ -33,6 +33,11 @@ int main()
     /* initialize data to pass to thread 2 */
     data2.thread_no = 2;
     strcpy(data2.message, "Hi!");
+
+	FILE *fp;
+	fp = fopen(FILE_PATH, "w");
+	fprintf(fp, "%d 2", 9000);
+	fclose(fp);
     
     /* create threads 1 and 2 */    
     pthread_create (&thread1, NULL, (void *) &print_message_function, (void *) &data1);
@@ -60,9 +65,6 @@ void print_message_function ( void *ptr )
     data = (thdata *) ptr;  /* type cast to a pointer to thdata */
 
 	FILE *fp;
-	fp = fopen(FILE_PATH, "w");
-	fprintf(fp, "%d", 9000);
-	fclose(fp);
 	for(i = 0; i < 2; i++) {
 		fp = fopen(FILE_PATH, "r");
 		fscanf(fp, "%llu", &myrand);
