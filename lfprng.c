@@ -11,31 +11,37 @@ MODULE_LICENSE("GPL");
 
 struct thread_node {
 	pid_t pid;
-	unsigned long long rand;
-	struct list_head list;
+	unsigned long long num;
+	struct thread_node *next;
 };
 
 ssize_t lfprng_write(struct file *filp, const char *buffer, unsigned long count, void *data);
 int lfprng_read(char *page, char **start, off_t offset, int count, int *eof, void *data);
-void free_thread_list(void);
-struct thread_node* find_thread_node(int pid);
+void add_thread_node(unsigned long long seed);
+int check_process(void);
+void remove_thread(struct thread_node *node);
+struct thread_node* find_thread_node(struct thread_node *node);
 
 static struct proc_dir_entry *proc_entry;
+
 static struct thread_node *head_node;
 pid_t tgid;
-int thread_count = 0;
+int thread_count;
 
 int init_lfprng_module(void) {
 
 	int ret = 0;
 
-	proc_entry = create_proc_entry("lfprng", 0644, NULL);
+	proc_entry = create_proc_entry("lfprng", 0666, NULL);
 
 	if(proc_entry == NULL) {
 		ret = -ENOMEM;
 		printk(KERN_INFO "lfprng: Couldn't create proc entry\n");
 	}
 	else {
+		head_node = NULL;
+		tgid = -1;
+
 		proc_entry->read_proc = lfprng_read;
 		proc_entry->write_proc = lfprng_write;
 		printk(KERN_INFO "lfprng: Module loaded.\n");
@@ -46,20 +52,18 @@ int init_lfprng_module(void) {
 
 void cleanup_lfprng_module(void) {
 	remove_proc_entry("lfprng", NULL);
+	remove_thread(head_node);
 	printk(KERN_INFO "lfprng: Module unloaded.\n");
 }
-
 
 module_init(init_lfprng_module);
 module_exit(cleanup_lfprng_module);
 
 ssize_t lfprng_write(struct file *filp, const char *buffer, unsigned long count, void *data) {
-	
 	int length;
 	char temp[1000];
 	unsigned long long seed;
-	struct thread_node *temp_node;
-	
+
 	length = count > 999 ? 999 : count;
 
 	if(copy_from_user(temp, buffer, length))
@@ -69,73 +73,87 @@ ssize_t lfprng_write(struct file *filp, const char *buffer, unsigned long count,
 
 	sscanf((const char*)temp, "%llu", &seed);
 
-	if(tgid != current->tgid) {
+	if(tgid == current->tgid || !check_process()) {
 		tgid = current->tgid;
-		//memory clean up of the list
-		if(tgid != 0)
-			free_thread_list();
-
-		//create new list
-		head_node = (struct thread_node*) vmalloc(sizeof(struct thread_node));
-		head_node->pid = current->pid;
-		head_node->rand = seed;
-
-		INIT_LIST_HEAD(&head_node->list);
-		thread_count++;
-	}
-	else if(find_thread_node(current->pid) == NULL){
-		temp_node = (struct thread_node*) vmalloc(sizeof(struct thread_node));
-		temp_node->pid = current->pid;
-		temp_node->rand = seed;
-
-		list_add(&(temp_node->list), &(head_node->list));
-		thread_count++;
+		add_thread_node(seed);
 	}
 
 	printk(KERN_INFO "My current tgid is %d\n", current->tgid);
 	printk(KERN_INFO "My current pid is %d\n", current->pid);
+	printk(KERN_INFO "My given seed is %llu\n", seed);
 
 	return length;
 }
-
-
 int lfprng_read(char *page, char **start, off_t offset, int count, int *eof, void *data) {
-	struct thread_node *temp;
-	int length = 0;
+	int length;
+	struct thread_node *node;
+	unsigned long long seed = 10;
 
-	temp = find_thread_node(current->pid);
+	printk(KERN_INFO "Find Thread Node Call\n");
+	node = find_thread_node(head_node);
 
-	if(temp == NULL) {
-		printk(KERN_INFO "THREAD NOT FOUND");
-		return 0;
-	}
-
-	length = sprintf(page, "%llu", temp->rand);
+	if(node != NULL)
+		length = sprintf(page, "%llu", node->num);
+	else
+		length = sprintf(page, "%llu", seed);
 
 	return length + 1;
 }
 
-void free_thread_list(void) {
-	struct thread_node *temp;
-	struct list_head *pos, *q;
+void add_thread_node(unsigned long long seed) {
+	struct thread_node *node = vmalloc(sizeof(struct thread_node));
+	node->pid = current->pid;
+	node->num = seed;
+	if(head_node != NULL)
+		node->next = head_node;
+	else
+		node->next = NULL;
+	head_node = node;
+}
 
-	list_for_each_safe(pos, q, &(head_node->list)) {
-		temp = list_entry(pos, struct thread_node, list);
-		list_del(pos);
-		vfree(temp);
+struct thread_node* find_thread_node(struct thread_node *node) {
+	if(node == NULL)
+		return NULL;
+
+	if(node->pid == current->pid) {
+		printk(KERN_INFO "Node Found: %d\n", node->pid);
+		return node;
+	}
+	else if(node->next != NULL)
+		return find_thread_node(node->next);
+	else {
+		printk(KERN_INFO "Invalid Thread Access\n");
+		return NULL;
 	}
 }
 
-struct thread_node* find_thread_node(int pid) {
-	struct thread_node *temp;
-	struct list_head *pos;
+int check_process(void) {
+	int found = 0;
 
-	list_for_each(pos, &(head_node->list)) {
-		temp = list_entry(pos, struct thread_node, list);
-
-		if(temp->pid == pid)
-			return temp;
+	struct task_struct *p;
+	for_each_process(p) {
+		if(p->tgid == tgid) {
+			found = 1;
+			break;
+		}
 	}
 
-	return NULL;
+	if(!found) {
+		printk(KERN_INFO "Deleting process: %d\n", tgid);
+		remove_thread(head_node);
+	}
+
+	return found;
+}
+
+void remove_thread(struct thread_node *node) {
+	if(node == NULL)
+		return;
+
+	if(node->next != NULL) {
+		remove_thread(node->next);
+	}
+
+	vfree(node);
+	head_node = NULL;
 }
