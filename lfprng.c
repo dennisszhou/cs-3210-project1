@@ -78,10 +78,8 @@ ssize_t lfprng_write(struct file *filp, const char *buffer, unsigned long count,
 	sscanf((const char*)temp, "%llu %d", &seed, &thread_count);
 
 	printk(KERN_INFO "Thread Count: %d\n", thread_count);
-	if(!check_process()) {
-		tgid = current->tgid;
-		add_thread_node(seed);
-	}
+	tgid = current->tgid;
+	add_thread_node(seed);
 
 	if(thread_count == 0)
 		return -EINVAL;
