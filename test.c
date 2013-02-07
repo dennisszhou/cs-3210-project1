@@ -23,8 +23,8 @@ typedef struct str_thdata
 
 int main()
 {
-    pthread_t thread1, thread2;  /* thread variables */
-    thdata data1, data2;         /* structs to be passed to threads */
+    pthread_t thread1, thread2, thread3;  /* thread variables */
+    thdata data1, data2, data3;         /* structs to be passed to threads */
     
     /* initialize data to pass to thread 1 */
     data1.thread_no = 1;
@@ -34,20 +34,25 @@ int main()
     data2.thread_no = 2;
     strcpy(data2.message, "Hi!");
 
+	data3.thread_no = 3;
+    strcpy(data3.message, "Hello!");
+
 	FILE *fp;
 	fp = fopen(FILE_PATH, "w");
-	fprintf(fp, "%d 2", 9000);
+	fprintf(fp, "%d 3", 1);
 	fclose(fp);
     
     /* create threads 1 and 2 */    
     pthread_create (&thread1, NULL, (void *) &print_message_function, (void *) &data1);
     pthread_create (&thread2, NULL, (void *) &print_message_function, (void *) &data2);
+	pthread_create (&thread3, NULL, (void *) &print_message_function, (void *) &data3);
 
     /* Main block now waits for both threads to terminate, before it exits
        If main block exits, both threads exit, even if the threads have not
        finished their work */ 
     pthread_join(thread1, NULL);
     pthread_join(thread2, NULL);
+	pthread_join(thread3, NULL);
               
     /* exit */  
     exit(0);
@@ -65,7 +70,7 @@ void print_message_function ( void *ptr )
     data = (thdata *) ptr;  /* type cast to a pointer to thdata */
 
 	FILE *fp;
-	for(i = 0; i < 2; i++) {
+	for(i = 0; i < 3; i++) {
 		fp = fopen(FILE_PATH, "r");
 		fscanf(fp, "%llu", &myrand);
 		fclose(fp);
