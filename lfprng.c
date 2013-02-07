@@ -78,8 +78,13 @@ ssize_t lfprng_write(struct file *filp, const char *buffer, unsigned long count,
 	sscanf((const char*)temp, "%llu %d", &seed, &thread_count);
 
 	printk(KERN_INFO "Thread Count: %d\n", thread_count);
-	tgid = current->tgid;
-	add_thread_node(seed);
+	if(!check_process()) {
+		tgid = current->tgid;
+		add_thread_node(seed);
+	}
+
+	if(thread_count == 0)
+		return -EINVAL;
 
 	printk(KERN_INFO "My current tgid is %d\n", current->tgid);
 	printk(KERN_INFO "My current pid is %d\n", current->pid);
@@ -142,16 +147,21 @@ void add_thread_node(unsigned long long seed) {
 }
 
 struct thread_node* find_thread_node(struct thread_node *node) {
+	pid_t ret;
+	pid_t cid = current->pid;
+
 	if(node == NULL)
 		return NULL;
 
 	if(node->pid == current->pid) {
-		printk(KERN_INFO "Node Found: %d\n", node->pid);
 		return node;
 	}
 	else if(node->pid == -1) {
-		node->pid = current->pid;
-		return node;
+		ret = __sync_val_compare_and_swap(&(node->pid), -1, cid);
+		if(node->pid == current->pid)
+			return node;
+
+		return find_thread_node(node->next);
 	}
 	else if(node->next != NULL)
 		return find_thread_node(node->next);
