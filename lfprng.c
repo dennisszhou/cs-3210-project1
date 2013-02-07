@@ -23,7 +23,7 @@ int check_process(void);
 void remove_thread(struct thread_node *node);
 struct thread_node* find_thread_node(struct thread_node *node);
 
-static unsigned long long BASE =76421123;
+static unsigned long long BASE = 3;
 static unsigned int MOD=2147483647;
 static struct proc_dir_entry *proc_entry;
 
@@ -79,6 +79,7 @@ ssize_t lfprng_write(struct file *filp, const char *buffer, unsigned long count,
 
 	printk(KERN_INFO "Thread Count: %d\n", thread_count);
 	tgid = current->tgid;
+	remove_thread(head_node);
 	add_thread_node(seed);
 
 	if(thread_count == 0)
@@ -99,7 +100,8 @@ int lfprng_read(char *page, char **start, off_t offset, int count, int *eof, voi
 
 	if(node != NULL) {
 		length = sprintf(page, "%llu", node->num);
-		node->num = lfprng_generate(node->num);
+		if(offset == 0)
+			node->num = lfprng_generate(node->num);
 	}
 	else
 		length = sprintf(page, "%llu", seed);
@@ -119,28 +121,34 @@ unsigned long long lfprng_generate(unsigned long long num) {
 	a *= num;
 
 	ret = do_div(a, MOD);
+
 	return ret;
 }
 
 void add_thread_node(unsigned long long seed) {
 	int i;
 	unsigned long long f = seed;
-	unsigned long long ret;
+	unsigned long long ret, tempF;
 	struct thread_node *node;
 
 	for(i = 0; i < thread_count; i++) {
 		f *= BASE;
+		tempF = f;
+		printk(KERN_INFO "init: %d, %llu", i, f);
 		ret = do_div(f, MOD);
 
 		printk(KERN_INFO "Thread %d: %llu\n", i, ret);
 		node = vmalloc(sizeof(struct thread_node));
 		node->pid = -1;
 		node->num = ret;
+		
 		if(head_node != NULL)
 			node->next = head_node;
 		else
 			node->next = NULL;
 		head_node = node;
+	
+		f = tempF;
 	}
 }
 
