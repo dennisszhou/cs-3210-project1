@@ -1,0 +1,10 @@
+How to run project (steps may require root permissions):
+1) Compile lfprng.c:
+make -C <kernel source directory> SUBDIRS=$PWD modules
+2) Load module:
+/sbin/insmod lfprng.ko
+3) Compile and run test code:
+gcc -pthread test.c
+./a.out
+4)Remove module
+/sbin/rmmod lfprng.ko
