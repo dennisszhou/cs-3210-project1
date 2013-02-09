@@ -54,6 +54,8 @@ static unsigned long long pseed[MAX_THREADS][4]; //[4] to padd to cache line
 unsigned long long random_last = 0;
 #pragma omp threadprivate(random_last)
 
+#define FILE_PATH "/proc/lfprng"
+
 
 double myrandom()
 {
@@ -85,7 +87,7 @@ void seed(unsigned long long iseed, double low_in, double hi_in)
   {
     if(low_in < hi_in)
       { 
-  random_low = low_in;
+	random_low = low_in;
 	random_hi  = hi_in;
       }
     else
@@ -116,6 +118,24 @@ void seed(unsigned long long iseed, double low_in, double hi_in)
   random_last = (unsigned long long) pseed[id][0];
 }
 
+void lfprng_seed(unsigned long long seed, int num_threads) {
+		FILE *fp;
+		fp = fopen(FILE_PATH, "w");
+		fprintf(fp, "%llu %d", seed, num_threads);
+		fclose(fp);
+}
+
+double lfprng_read() {
+		unsigned long long myrand;		
+		FILE *fp;
+		fp = fopen(FILE_PATH, "r");
+		fscanf(fp, "%llu", &myrand);
+		fclose(fp);
+
+		return ((double)myrand/(double)PMOD);
+}
+
+
 /*  This ends the reference openMP implementation.  The following is the core testing loop. */
 
 int tests[6]={2,3,4,5,6,10};
@@ -126,11 +146,15 @@ int main(int argc, char **argv) {
   unsigned long long myseed = 123456789, setseed;
   int i, j;
 
+	unsigned long long myrand;
+
   setseed=myseed;
   seed(setseed, 0.0, 1.1);
 
+	lfprng_seed(myseed, 1);
+
   for (i=0; i<120; i++) {
-    baseref[i] = myrandom();
+    baseref[i] = lfprng_read();
   }
 
   for (j=0; j<6; j++) {
@@ -142,12 +166,15 @@ int main(int argc, char **argv) {
 
 #pragma omp parallel reduction(+:sum)
     {
-      setseed=myseed;
-      seed(setseed,0.0,1.0);
+//      setseed=myseed;
+//      seed(setseed,0.0,1.0);
+
+		lfprng_seed(myseed, numthreads);
 
 #pragma omp for
       for (i=0; i<120; i++) {
-	sum += abs(myrandom() - baseref[i]);
+
+	sum += abs(lfprng_read() - baseref[i]);
       }
     }    
     printf(" Diff for %i threads is %f.\n", numthreads, sum);

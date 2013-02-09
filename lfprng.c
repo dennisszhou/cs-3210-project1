@@ -23,7 +23,7 @@ int check_process(void);
 void remove_thread(struct thread_node *node);
 struct thread_node* find_thread_node(struct thread_node *node);
 
-static unsigned long long BASE = 3;
+static unsigned long long BASE = 764261123;
 static unsigned int MOD=2147483647;
 static struct proc_dir_entry *proc_entry;
 
@@ -78,9 +78,11 @@ ssize_t lfprng_write(struct file *filp, const char *buffer, unsigned long count,
 	sscanf((const char*)temp, "%llu %d", &seed, &thread_count);
 
 	printk(KERN_INFO "Thread Count: %d\n", thread_count);
-	tgid = current->tgid;
-	remove_thread(head_node);
-	add_thread_node(seed);
+	if((check_process() && tgid == current->tgid) || !check_process()) {
+		tgid = current->tgid;
+		remove_thread(head_node);
+		add_thread_node(seed);
+	}
 
 	if(thread_count == 0)
 		return -EINVAL;
@@ -94,7 +96,7 @@ ssize_t lfprng_write(struct file *filp, const char *buffer, unsigned long count,
 int lfprng_read(char *page, char **start, off_t offset, int count, int *eof, void *data) {
 	int length;
 	struct thread_node *node;
-	unsigned long long seed = 10;
+	unsigned long long seed = 1;
 
 	node = find_thread_node(head_node);
 
@@ -156,7 +158,7 @@ struct thread_node* find_thread_node(struct thread_node *node) {
 	pid_t ret;
 	pid_t cid = current->pid;
 
-	if(node == NULL)
+	if(node == NULL || tgid != current->tgid)
 		return NULL;
 
 	if(node->pid == current->pid) {
@@ -186,11 +188,6 @@ int check_process(void) {
 			found = 1;
 			break;
 		}
-	}
-
-	if(!found) {
-		printk(KERN_INFO "Deleting process: %d\n", tgid);
-		remove_thread(head_node);
 	}
 
 	return found;
